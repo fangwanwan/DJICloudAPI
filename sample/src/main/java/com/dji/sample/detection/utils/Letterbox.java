@@ -1,4 +1,4 @@
-package cn.ck.utils;
+package com.dji.sample.detection.utils;
 
 import org.opencv.core.Core;
 import org.opencv.core.Mat;

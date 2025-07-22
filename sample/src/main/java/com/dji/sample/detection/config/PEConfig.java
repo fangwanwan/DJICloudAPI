@@ -1,4 +1,4 @@
-package cn.ck.config;
+package com.dji.sample.detection.config;
 
 import org.opencv.core.Scalar;
 

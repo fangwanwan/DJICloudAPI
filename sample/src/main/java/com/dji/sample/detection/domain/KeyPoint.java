@@ -1,4 +1,4 @@
-package cn.ck.domain;
+package com.dji.sample.detection.domain;
 
 public class KeyPoint {
     private final Integer id;

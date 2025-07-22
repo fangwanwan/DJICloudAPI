@@ -1,4 +1,4 @@
-package cn.ck.utils;
+package com.dji.sample.detection.utils;
 
 public class Test1 {
 

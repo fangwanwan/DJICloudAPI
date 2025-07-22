@@ -1,6 +1,6 @@
-package cn.ck.utils;
+package com.dji.sample.detection.utils;
 
-import cn.ck.domain.Detection;
+import com.dji.sample.detection.domain.Detection;
 import org.opencv.core.*;
 import org.opencv.imgproc.Imgproc;
 

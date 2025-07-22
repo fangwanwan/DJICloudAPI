@@ -34,21 +34,21 @@ public class AuthInterceptor implements HandlerInterceptor {
         }
         String token = request.getHeader(PARAM_TOKEN);
         // Check if the token exists.
-        if (!StringUtils.hasText(token)) {
+        /*if (!StringUtils.hasText(token)) {
             response.setStatus(HttpStatus.UNAUTHORIZED.value());
             log.error(CommonErrorEnum.NO_TOKEN.getMessage());
             return false;
-        }
+        }*/
 
-        // Check if the current token is valid.
+       /* // Check if the current token is valid.
         Optional<CustomClaim> customClaimOpt = JwtUtil.parseToken(token);
         if (customClaimOpt.isEmpty()) {
             response.setStatus(HttpStatus.UNAUTHORIZED.value());
             return false;
-        }
+        }*/
 
         // Put the custom data from the token into the request.
-        request.setAttribute(TOKEN_CLAIM, customClaimOpt.get());
+       /* request.setAttribute(TOKEN_CLAIM, customClaimOpt.get());*/
         return true;
     }
 

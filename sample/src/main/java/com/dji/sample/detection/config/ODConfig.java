@@ -1,11 +1,6 @@
-package cn.ck.config;
+package com.dji.sample.detection.config;
 
-import java.util.Random;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-import java.util.HashMap;
+import java.util.*;
 
 public final class ODConfig {
 

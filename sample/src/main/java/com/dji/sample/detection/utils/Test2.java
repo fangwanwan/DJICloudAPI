@@ -1,11 +1,4 @@
-package cn.ck.utils;
-
-import ai.onnxruntime.OnnxJavaType;
-import ai.onnxruntime.OnnxTensor;
-import ai.onnxruntime.OrtEnvironment;
-import ai.onnxruntime.OrtSession;
-
-import java.util.ArrayList;
+package com.dji.sample.detection.utils;
 
 public class Test2 {
 
