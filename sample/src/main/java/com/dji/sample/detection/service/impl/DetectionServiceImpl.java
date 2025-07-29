@@ -5,6 +5,7 @@ import ai.onnxruntime.OrtEnvironment;
 import ai.onnxruntime.OrtException;
 import ai.onnxruntime.OrtSession;
 import com.dji.sample.detection.service.DetectionService;
+import lombok.extern.slf4j.Slf4j;
 import org.opencv.core.*;
 import org.opencv.highgui.HighGui;
 import org.opencv.imgcodecs.Imgcodecs;
@@ -37,71 +38,105 @@ import java.io.OutputStream;
 import java.nio.FloatBuffer;
 import java.util.HashMap;
 
+import org.springframework.beans.factory.annotation.Value;
+import javax.annotation.PostConstruct;
+import javax.annotation.PreDestroy;
+
+@Slf4j
 @Service
 public class DetectionServiceImpl implements DetectionService {
-    @Override
-    public void detectPeople() throws IOException, OrtException {
-        //System.load(ClassLoader.getSystemResource("lib/opencv_java470-无用.dll").getPath());
-        nu.pattern.OpenCV.loadLocally();
+    @Value("${yolo.model-path}")
+    private String modelPath;
 
-        //linux和苹果系统需要注释这一行，如果仅打开摄像头预览，这一行没有用，可以删除，如果rtmp或者rtsp等等这一样有用，也可以用pom依赖代替
-        String OS = System.getProperty("os.name").toLowerCase();
-        if (OS.contains("win")) {
-            System.load(ClassLoader.getSystemResource("lib/opencv_videoio_ffmpeg470_64.dll").getPath());
-        }
-        String model_path = "/Users/mac/IdeaProjects/yolo-onnx-java/src/main/resources/model/yolov7-tiny.onnx";
+    @Value("${ffmpeg.rtmp-url}")
+    private String rtmpUrl;
 
-        Process ffmpeg = getProcess();
-        OutputStream ffmpegInput = ffmpeg.getOutputStream();
+    @Value("${video.source}")
+    private int videoSource;
 
-        String[] labels = {
-                "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train",
-                "truck", "boat", "traffic light", "fire hydrant", "stop sign", "parking meter",
-                "bench", "bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear",
-                "zebra", "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase",
-                "frisbee", "skis", "snowboard", "sports ball", "kite", "baseball bat",
-                "baseball glove", "skateboard", "surfboard", "tennis racket", "bottle",
-                "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple",
-                "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut",
-                "cake", "chair", "couch", "potted plant", "bed", "dining table", "toilet",
-                "tv", "laptop", "mouse", "remote", "keyboard", "cell phone", "microwave",
-                "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase", "scissors",
-                "teddy bear", "hair drier", "toothbrush"};
+    @Value("${video.default-path}")
+    private String defaultVideoPath;
+
+    // 跳帧检测，一般设置为3，毫秒内视频画面变化是不大的，快了无意义，反而浪费性能
+    @Value("${detection.skip-frames}")
+    int detect_skip;
+
+    private OrtSession session;
+    private String[] labels;
+    private Process ffmpeg;
+    private OutputStream ffmpegInput;
+    OrtEnvironment environment;
+    ODConfig odConfig = new ODConfig();
+
+    @PostConstruct
+    public void init() throws IOException, OrtException {
+        // 初始化标签
+        labels = new String[]{
+            "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train",
+            "truck", "boat", "traffic light", "fire hydrant", "stop sign", "parking meter",
+            "bench", "bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear",
+            "zebra", "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase",
+            "frisbee", "skis", "snowboard", "sports ball", "kite", "baseball bat",
+            "baseball glove", "skateboard", "surfboard", "tennis racket", "bottle",
+            "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple",
+            "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut",
+            "cake", "chair", "couch", "potted plant", "bed", "dining table", "toilet",
+            "tv", "laptop", "mouse", "remote", "keyboard", "cell phone", "microwave",
+            "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase", "scissors",
+            "teddy bear", "hair drier", "toothbrush"
+        };
 
         // 加载ONNX模型
-        OrtEnvironment environment = OrtEnvironment.getEnvironment();
+        loadONNXModel();
+
+        // 初始化FFmpeg
+        initFFmpeg();
+    }
+
+    private void loadONNXModel() throws OrtException {
+        environment = OrtEnvironment.getEnvironment();
         OrtSession.SessionOptions sessionOptions = new OrtSession.SessionOptions();
-
-        // 使用gpu,需要本机按钻过cuda，并修改pom.xml，不安装也能运行本程序
+        // 实际项目中建议开启GPU加速
         // sessionOptions.addCUDA(0);
-        // 实际项目中，视频识别必须开启GPU，并且要防止队列堆积
+        session = environment.createSession(modelPath, sessionOptions);
 
-        OrtSession session = environment.createSession(model_path, sessionOptions);
-        // 输出基本信息
+        // 输出模型信息
+        logModelInfo();
+    }
+
+    private void logModelInfo() throws OrtException {
         session.getInputInfo().keySet().forEach(x -> {
             try {
-                System.out.println("input name = " + x);
-                System.out.println(session.getInputInfo().get(x).getInfo().toString());
+                log.info("input name ={}",x);
+                log.info(session.getInputInfo().get(x).getInfo().toString());
             } catch (OrtException e) {
                 throw new RuntimeException(e);
             }
         });
+    }
 
+    private void initFFmpeg() throws IOException {
+        log.info("FFmpeg 支持: " + Videoio.CAP_FFMPEG);
+        ffmpeg = getProcess();
+        ffmpegInput = ffmpeg.getOutputStream();
+    }
+
+    public void detectPeople() throws IOException, OrtException {
         // 加载标签及颜色
-        ODConfig odConfig = new ODConfig();
+        odConfig = new ODConfig();
         VideoCapture video = new VideoCapture();
 
-        // 也可以设置为rtmp或者rtsp视频流：video.open("rtmp://192.168.1.100/live/test"), 海康，大华，乐橙，宇视，录像机等等
-        // video.open("rtsp://192.168.1.100/live/test")
-        // 也可以静态视频文件：video.open("video/car3.mp4");  flv 等
-        // 不持支h265视频编码，如果无法播放或者程序卡住，请修改视频编码格式
-        video.open(1);  //获取电脑上第0个摄像头
-        //video.open("images/car2.mp4"); //不开启gpu比较卡
+        // 打开视频源
+        openVideoSource(video);
+    }
 
-        //可以把识别后的视频在通过rtmp转发到其他流媒体服务器，就可以远程预览视频后视频，需要使用ffmpeg将连续图片合成flv 等等，很简单。
-        if (!video.isOpened()) {
-            System.err.println("打开视频流失败,未检测到监控,请先用vlc软件测试链接是否可以播放！,下面试用默认测试视频进行预览效果！");
-            video.open("video/car3.mp4");
+    private void openVideoSource(VideoCapture video) throws IOException {
+        try {
+            // 尝试打开视频源
+            video.open(videoSource);
+        } catch (Exception e) {
+            System.err.println("视频源初始化失败: " + e.getMessage());
+            throw new RuntimeException("无法初始化视频源", e);
         }
 
         // 在这里先定义下框的粗细、字的大小、字的类型、字的颜色(按比例设置大小粗细比较好一些)
@@ -111,9 +146,6 @@ public class DetectionServiceImpl implements DetectionService {
         int fontFace = Imgproc.FONT_HERSHEY_SIMPLEX;
 
         Mat img = new Mat();
-
-        // 跳帧检测，一般设置为3，毫秒内视频画面变化是不大的，快了无意义，反而浪费性能
-        int detect_skip = 4;
 
         // 跳帧计数
         int detect_skip_index = 1;
@@ -203,11 +235,25 @@ public class DetectionServiceImpl implements DetectionService {
 
         HighGui.destroyAllWindows();
         video.release();
-        System.exit(0);
+    }
+
+    @PreDestroy
+    public void destroy() {
+        // 资源清理
+        if (session != null) {
+            try {
+                session.close();
+            } catch (OrtException e) {
+                System.err.println("OrtSession关闭失败: " + e.getMessage());
+            }
+        }
+        if (ffmpeg != null) {
+            ffmpeg.destroy();
+        }
     }
 
     @NotNull
-    private static Process getProcess() throws IOException {
+    private Process getProcess() throws IOException {
         ProcessBuilder pb = new ProcessBuilder(
                 "ffmpeg",
                 "-f", "image2pipe",         // 从管道读取图片流
@@ -218,7 +264,7 @@ public class DetectionServiceImpl implements DetectionService {
                 "-tune", "zerolatency",     // 零延迟优化
                 "-c:a", "aac",              // 音频编码器（如果无音频可删除此行）
                 "-f", "flv",                // 输出格式改为 FLV
-                "rtmp://localhost:1935/live/v1"  // SRS 的 RTMP 地址
+                this.rtmpUrl  // 使用配置的RTMP地址
         );
         pb.redirectErrorStream(true);   // 合并错误输出
         Process ffmpeg = pb.start();
