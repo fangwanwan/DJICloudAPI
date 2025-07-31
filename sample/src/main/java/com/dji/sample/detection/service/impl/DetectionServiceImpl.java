@@ -65,8 +65,9 @@ public class DetectionServiceImpl implements DetectionService {
     private String[] labels;
     private Process ffmpeg;
     private OutputStream ffmpegInput;
-    OrtEnvironment environment;
-    ODConfig odConfig = new ODConfig();
+    private VideoCapture video = new VideoCapture();
+    private OrtEnvironment environment;
+    private ODConfig odConfig = new ODConfig();
 
     @PostConstruct
     public void init() throws IOException, OrtException {
@@ -121,22 +122,29 @@ public class DetectionServiceImpl implements DetectionService {
         ffmpegInput = ffmpeg.getOutputStream();
     }
 
-    public void detectPeople() throws IOException, OrtException {
+    public void detectPeople() throws IOException, OrtException, InterruptedException {
         // 加载标签及颜色
         odConfig = new ODConfig();
-        VideoCapture video = new VideoCapture();
-
         // 打开视频源
         openVideoSource(video);
     }
 
-    private void openVideoSource(VideoCapture video) throws IOException {
+    @Override
+    public void stopDetect() {
+        video.release();
+    }
+
+    private void openVideoSource(VideoCapture video) throws IOException, InterruptedException {
         try {
             // 尝试打开视频源
-            video.open(videoSource);
+            video.open(defaultVideoPath);
         } catch (Exception e) {
             System.err.println("视频源初始化失败: " + e.getMessage());
             throw new RuntimeException("无法初始化视频源", e);
+        }
+        if (!video.isOpened()) {
+            System.err.println("打开视频流失败,未检测到监控,请先用vlc软件测试链接是否可以播放！,下面试用默认测试视频进行预览效果！");
+            video.open("/Users/mac/Downloads/DJI-Cloud-API-Demo-main/test.mp4");
         }
 
         // 在这里先定义下框的粗细、字的大小、字的类型、字的颜色(按比例设置大小粗细比较好一些)
@@ -230,11 +238,8 @@ public class DetectionServiceImpl implements DetectionService {
             ffmpegInput.write(imageBytes);
             ffmpegInput.flush();
             // 控制帧率（可选）
-            //Thread.sleep(66); // 约15fps
+            Thread.sleep(40); // 约15fps
         }
-
-        HighGui.destroyAllWindows();
-        video.release();
     }
 
     @PreDestroy

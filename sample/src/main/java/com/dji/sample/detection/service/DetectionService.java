@@ -5,5 +5,7 @@ import ai.onnxruntime.OrtException;
 import java.io.IOException;
 
 public interface DetectionService {
-    void detectPeople() throws IOException, OrtException;
+    void detectPeople() throws IOException, OrtException, InterruptedException;
+
+    void stopDetect();
 }
